@@ -62,7 +62,7 @@ jobs:
 
           const x = 60;
           const titleY = 130;
-          const bodyStartY = 220;
+          const bodyStartY = 240;
           const lineStep = 62;
           const dateY = 1015;
 
