@@ -35,16 +35,25 @@ jobs:
           npm i sharp axios
 
       - name: Render Tomorrow Meals (Breakfast/Lunch/Dinner)
+        env:
+          NEIS_KEY: ${{ secrets.NEIS_KEY }}
+          ATPT: ${{ secrets.ATPT_OFCDC_SC_CODE }}
+          SCHOOL: ${{ secrets.SD_SCHUL_CODE }}
         run: |
           node <<'NODE'
           const fs = require("fs");
           const sharp = require("sharp");
           const axios = require("axios");
 
-          // ====== (테스트용) NEIS 값 ======
-          const NEIS_KEY = "967c5ea2dcd94832b604e3eb2f4ff8eb";
-          const ATPT = "Q10";
-          const SCHOOL = "8490081";
+          // ====== Secrets에서만 읽음 ======
+          const NEIS_KEY = process.env.NEIS_KEY;
+          const ATPT = process.env.ATPT;
+          const SCHOOL = process.env.SCHOOL;
+
+          if (!NEIS_KEY || !ATPT || !SCHOOL) {
+            console.error("ERROR: Secrets(NEIS_KEY, ATPT_OFCDC_SC_CODE, SD_SCHUL_CODE)가 비어있습니다.");
+            process.exit(1);
+          }
 
           // ====== 템플릿(완성본 유지) ======
           const W = 1080, H = 1080;
@@ -84,7 +93,6 @@ jobs:
           }
 
           function ymd(date) {
-            // KST 날짜 기준 문자열(YYYYMMDD)
             const y = date.getFullYear();
             const m = String(date.getMonth() + 1).padStart(2, "0");
             const d = String(date.getDate()).padStart(2, "0");
@@ -99,7 +107,6 @@ jobs:
           }
 
           function titleText(date, label) {
-            // label: 조식/중식/석식
             const mm = date.getMonth() + 1;
             const dd = date.getDate();
             return `${mm}월 ${dd}일 [${label}]`;
