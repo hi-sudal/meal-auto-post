@@ -61,10 +61,10 @@ jobs:
           const FG = "#F5F5F5";
 
           const x = 60;
-          const titleY = 70;
+          const titleY = 80;
           const bodyStartY = 190;
           const lineStep = 62;
-          const dateY = 1000;
+          const dateY = 1015;
 
           const TITLE_SIZE = 56;
           const BODY_SIZE  = 44;
