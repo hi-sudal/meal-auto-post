@@ -1,0 +1,68 @@
+name: Render Meal Image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Create project files
+        run: |
+          mkdir -p scripts
+          cat << 'EOF' > scripts/render.js
+          const fs = require("fs");
+          const sharp = require("sharp");
+
+          const W = 1080;
+          const H = 1080;
+
+          const svg = `
+          <svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100%" height="100%" fill="#212224"/>
+            <text x="60" y="70" fill="#F5F5F5"
+              font-family="DejaVu Sans" font-size="56">
+              2월 2일 [조식]
+            </text>
+            <text x="60" y="180" fill="#F5F5F5"
+              font-family="DejaVu Sans" font-size="44">
+              쌀밥
+            </text>
+            <text x="60" y="240" fill="#F5F5F5"
+              font-family="DejaVu Sans" font-size="44">
+              쇠고기무국 (5.6.16)
+            </text>
+            <text x="60" y="980" fill="#F5F5F5"
+              font-family="DejaVu Sans" font-size="46">
+              2026.02.02
+            </text>
+          </svg>
+          `;
+
+          fs.writeFileSync("image.svg", svg);
+
+          EOF
+
+      - name: Install sharp
+        run: npm install sharp
+
+      - name: Convert SVG to PNG
+        run: |
+          node -e "
+          const sharp = require('sharp');
+          sharp('image.svg').png().toFile('meal.png');
+          "
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: meal-image
+          path: meal.png
