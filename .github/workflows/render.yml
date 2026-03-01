@@ -2,6 +2,8 @@ name: Render Tomorrow Meals (3 images)
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 13 * * *"
 
 jobs:
   build:
