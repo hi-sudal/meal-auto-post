@@ -15,30 +15,37 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install fontconfig (for registering fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fontconfig
+
+      - name: Register NotoSansKR font file
+        run: |
+          if [ ! -f "NotoSansKR-Regular.ttf" ]; then
+            echo "ERROR: NotoSansKR-Regular.ttf 파일이 저장소 루트에 없습니다."
+            exit 1
+          fi
+
+          mkdir -p ~/.local/share/fonts
+          cp "NotoSansKR-Regular.ttf" ~/.local/share/fonts/
+          fc-cache -f
+
+          echo "=== Font check ==="
+          fc-list | grep -i "noto" | head -n 20 || true
+
       - name: Install sharp
         run: |
           npm init -y
           npm i sharp
 
-      - name: Render PNG with NotoSansKR
+      - name: Render PNG (use installed font)
         run: |
           node <<'NODE'
           const fs = require("fs");
-          const path = require("path");
           const sharp = require("sharp");
 
-          const W = 1080;
-          const H = 1080;
-
-          // 폰트 파일 경로 (저장소 루트에 있어야 함)
-          const fontPath = path.join(process.cwd(), "NotoSansKR-Regular.ttf");
-
-          if (!fs.existsSync(fontPath)) {
-            console.error("NotoSansKR-Regular.ttf 파일이 저장소 루트에 없습니다.");
-            process.exit(1);
-          }
-
-          const fontBase64 = fs.readFileSync(fontPath).toString("base64");
+          const W = 1080, H = 1080;
 
           const title = "2월 2일 [조식]";
           const menuLines = [
@@ -73,19 +80,14 @@ jobs:
             return `<text x="${x}" y="${y}" class="body">${esc(line)}</text>`;
           }).join("\n");
 
+          // 핵심: font-family를 "Noto Sans KR"로 지정하고 fallback도 둠
           const svg = `
           <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
-            <defs>
-              <style>
-                @font-face {
-                  font-family: "CustomFont";
-                  src: url("data:font/ttf;base64,${fontBase64}") format("truetype");
-                }
-                .title { font-family: "CustomFont"; font-size: 56px; fill: ${FG}; }
-                .body  { font-family: "CustomFont"; font-size: 44px; fill: ${FG}; }
-                .date  { font-family: "CustomFont"; font-size: 46px; fill: ${FG}; }
-              </style>
-            </defs>
+            <style>
+              .title { font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif; font-size: 56px; fill: ${FG}; }
+              .body  { font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif; font-size: 44px; fill: ${FG}; }
+              .date  { font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif; font-size: 46px; fill: ${FG}; }
+            </style>
 
             <rect width="100%" height="100%" fill="${BG}"/>
 
