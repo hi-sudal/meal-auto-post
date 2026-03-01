@@ -61,7 +61,7 @@ jobs:
           const FG = "#F5F5F5";
 
           const x = 60;
-          const titleY = 1300;
+          const titleY = 130;
           const bodyStartY = 220;
           const lineStep = 62;
           const dateY = 1015;
