@@ -6,6 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -14,33 +15,84 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install Korean font
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-nanum
+
       - name: Install sharp
         run: |
           npm init -y
           npm i sharp
 
-      - name: Render PNG (no image.svg needed)
+      - name: Render Korean PNG
         run: |
           node <<'NODE'
           const fs = require("fs");
           const sharp = require("sharp");
 
-          const W = 1080, H = 1080;
+          const W = 1080;
+          const H = 1080;
 
           const svg = `
           <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
             <rect width="100%" height="100%" fill="#212224"/>
-            <text x="60" y="70" fill="#F5F5F5"
-              font-family="DejaVu Sans" font-size="56">Feb 2 [Breakfast]</text>
 
-            <text x="60" y="190" fill="#F5F5F5"
-              font-family="DejaVu Sans" font-size="44">Rice</text>
-            <text x="60" y="252" fill="#F5F5F5"
-              font-family="DejaVu Sans" font-size="44">Beef radish soup</text>
+            <!-- 제목 -->
+            <text x="60" y="70"
+              fill="#F5F5F5"
+              font-family="NanumGothic"
+              font-size="56"
+              dominant-baseline="hanging">
+              2월 2일 [조식]
+            </text>
 
-            <text x="60" y="980" fill="#F5F5F5"
-              font-family="DejaVu Sans" font-size="46">2026.02.02</text>
-          </svg>`.trim();
+            <!-- 메뉴 -->
+            <text x="60" y="190"
+              fill="#F5F5F5"
+              font-family="NanumGothic"
+              font-size="44">쌀밥</text>
+
+            <text x="60" y="252"
+              fill="#F5F5F5"
+              font-family="NanumGothic"
+              font-size="44">쇠고기무국 (5.6.16)</text>
+
+            <text x="60" y="314"
+              fill="#F5F5F5"
+              font-family="NanumGothic"
+              font-size="44">숙주미나리무침</text>
+
+            <text x="60" y="376"
+              fill="#F5F5F5"
+              font-family="NanumGothic"
+              font-size="44">참치김치볶음 (5.9)</text>
+
+            <text x="60" y="438"
+              fill="#F5F5F5"
+              font-family="NanumGothic"
+              font-size="44">육전 (1.5.6.10.15.18)</text>
+
+            <text x="60" y="500"
+              fill="#F5F5F5"
+              font-family="NanumGothic"
+              font-size="44">불닭맛김자반 (5)</text>
+
+            <text x="60" y="562"
+              fill="#F5F5F5"
+              font-family="NanumGothic"
+              font-size="44">꺾어먹는요거트 (2)</text>
+
+            <!-- 날짜 -->
+            <text x="60" y="1000"
+              fill="#F5F5F5"
+              font-family="NanumGothic"
+              font-size="46">
+              2026.02.02
+            </text>
+
+          </svg>
+          `.trim();
 
           fs.mkdirSync("output", { recursive: true });
 
