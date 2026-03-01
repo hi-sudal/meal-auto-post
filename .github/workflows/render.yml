@@ -15,82 +15,85 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Korean font
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y fonts-nanum
-
       - name: Install sharp
         run: |
           npm init -y
           npm i sharp
 
-      - name: Render Korean PNG
+      - name: Render PNG with NotoSansKR
         run: |
           node <<'NODE'
           const fs = require("fs");
+          const path = require("path");
           const sharp = require("sharp");
 
           const W = 1080;
           const H = 1080;
 
+          // 폰트 파일 경로 (저장소 루트에 있어야 함)
+          const fontPath = path.join(process.cwd(), "NotoSansKR-Regular.ttf");
+
+          if (!fs.existsSync(fontPath)) {
+            console.error("NotoSansKR-Regular.ttf 파일이 저장소 루트에 없습니다.");
+            process.exit(1);
+          }
+
+          const fontBase64 = fs.readFileSync(fontPath).toString("base64");
+
+          const title = "2월 2일 [조식]";
+          const menuLines = [
+            "쌀밥",
+            "쇠고기무국 (5.6.16)",
+            "숙주미나리무침",
+            "참치김치볶음 (5.9)",
+            "육전 (1.5.6.10.15.18)",
+            "불닭맛김자반 (5)",
+            "꺾어먹는요거트 (2)",
+          ];
+          const dateStr = "2026.02.02";
+
+          const BG = "#212224";
+          const FG = "#F5F5F5";
+
+          const x = 60;
+          const titleY = 70;
+          const bodyStartY = 190;
+          const lineStep = 62;
+          const dateY = 1000;
+
+          const esc = (s) =>
+            s.replaceAll("&", "&amp;")
+             .replaceAll("<", "&lt;")
+             .replaceAll(">", "&gt;")
+             .replaceAll('"', "&quot;")
+             .replaceAll("'", "&apos;");
+
+          const menuText = menuLines.map((line, i) => {
+            const y = bodyStartY + i * lineStep;
+            return `<text x="${x}" y="${y}" class="body">${esc(line)}</text>`;
+          }).join("\n");
+
           const svg = `
           <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
-            <rect width="100%" height="100%" fill="#212224"/>
+            <defs>
+              <style>
+                @font-face {
+                  font-family: "CustomFont";
+                  src: url("data:font/ttf;base64,${fontBase64}") format("truetype");
+                }
+                .title { font-family: "CustomFont"; font-size: 56px; fill: ${FG}; }
+                .body  { font-family: "CustomFont"; font-size: 44px; fill: ${FG}; }
+                .date  { font-family: "CustomFont"; font-size: 46px; fill: ${FG}; }
+              </style>
+            </defs>
 
-            <!-- 제목 -->
-            <text x="60" y="70"
-              fill="#F5F5F5"
-              font-family="NanumGothic"
-              font-size="56"
-              dominant-baseline="hanging">
-              2월 2일 [조식]
-            </text>
+            <rect width="100%" height="100%" fill="${BG}"/>
 
-            <!-- 메뉴 -->
-            <text x="60" y="190"
-              fill="#F5F5F5"
-              font-family="NanumGothic"
-              font-size="44">쌀밥</text>
+            <text x="${x}" y="${titleY}" class="title">${esc(title)}</text>
 
-            <text x="60" y="252"
-              fill="#F5F5F5"
-              font-family="NanumGothic"
-              font-size="44">쇠고기무국 (5.6.16)</text>
+            ${menuText}
 
-            <text x="60" y="314"
-              fill="#F5F5F5"
-              font-family="NanumGothic"
-              font-size="44">숙주미나리무침</text>
-
-            <text x="60" y="376"
-              fill="#F5F5F5"
-              font-family="NanumGothic"
-              font-size="44">참치김치볶음 (5.9)</text>
-
-            <text x="60" y="438"
-              fill="#F5F5F5"
-              font-family="NanumGothic"
-              font-size="44">육전 (1.5.6.10.15.18)</text>
-
-            <text x="60" y="500"
-              fill="#F5F5F5"
-              font-family="NanumGothic"
-              font-size="44">불닭맛김자반 (5)</text>
-
-            <text x="60" y="562"
-              fill="#F5F5F5"
-              font-family="NanumGothic"
-              font-size="44">꺾어먹는요거트 (2)</text>
-
-            <!-- 날짜 -->
-            <text x="60" y="1000"
-              fill="#F5F5F5"
-              font-family="NanumGothic"
-              font-size="46">
-              2026.02.02
-            </text>
-
+            <text x="${x}" y="${dateY}" class="date">${esc(dateStr)}</text>
           </svg>
           `.trim();
 
