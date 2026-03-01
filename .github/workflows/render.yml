@@ -1,4 +1,4 @@
-name: Render Tomorrow Meal
+name: Render Tomorrow Meal (Test)
 
 on:
   workflow_dispatch:
@@ -15,55 +15,74 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install fontconfig + register font
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fontconfig
+
+          mkdir -p ~/.local/share/fonts
+          cp NotoSansKR-Regular.ttf ~/.local/share/fonts/
+          fc-cache -f
+
       - name: Install dependencies
         run: |
           npm init -y
           npm i sharp axios
 
       - name: Render Tomorrow Meal Image
-        env:
-          NEIS_KEY: ${{ secrets.NEIS_KEY }}
-          ATPT: ${{ secrets.ATPT_OFCDC_SC_CODE }}
-          SCHOOL: ${{ secrets.SD_SCHUL_CODE }}
         run: |
           node <<'NODE'
           const fs = require("fs");
           const sharp = require("sharp");
           const axios = require("axios");
 
-          const W = 1080, H = 1080;
+          const NEIS_KEY = "967c5ea2dcd94832b604e3eb2f4ff8eb";
+          const ATPT = "Q10";
+          const SCHOOL = "8490081";
+          const MMEAL = "2"; // 중식
 
-          function getTomorrowKST() {
+          const W = 1080, H = 1080;
+          const BG = "#212224";
+          const FG = "#F5F5F5";
+
+          const x = 60;
+          const titleY = 70;
+          const bodyStartY = 190;
+          const lineStep = 62;
+          const dateY = 1000;
+
+          function tomorrowKST() {
             const now = new Date();
-            const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-            const kst = new Date(utc + (9 * 60 * 60 * 1000));
+            const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+            const kst = new Date(utc + 9 * 60 * 60 * 1000);
             kst.setDate(kst.getDate() + 1);
             return kst;
           }
 
-          function formatYMD(date) {
-            return date.toISOString().slice(0,10).replaceAll("-","");
+          function ymd(d) {
+            return d.toISOString().slice(0,10).replaceAll("-","");
           }
 
-          function formatTitle(date) {
-            return `${date.getMonth()+1}월 ${date.getDate()}일 [급식]`;
-          }
-
-          function formatDate(date) {
-            return date.toISOString().slice(0,10);
+          function esc(s) {
+            return s.replaceAll("&","&amp;")
+                    .replaceAll("<","&lt;")
+                    .replaceAll(">","&gt;");
           }
 
           async function fetchMeal(dateYMD) {
-            const url = "https://open.neis.go.kr/hub/mealServiceDietInfo";
-            const res = await axios.get(url, {
-              params: {
-                KEY: process.env.NEIS_KEY,
-                Type: "json",
-                ATPT_OFCDC_SC_CODE: process.env.ATPT,
-                SD_SCHUL_CODE: process.env.SCHOOL,
-                MLSV_YMD: dateYMD
+            const res = await axios.get(
+              "https://open.neis.go.kr/hub/mealServiceDietInfo",
+              {
+                params: {
+                  KEY: NEIS_KEY,
+                  Type: "json",
+                  ATPT_OFCDC_SC_CODE: ATPT,
+                  SD_SCHUL_CODE: SCHOOL,
+                  MLSV_YMD: dateYMD,
+                  MMEAL_SC_CODE: MMEAL
+                }
               }
-            });
+            );
 
             const blocks = res.data.mealServiceDietInfo;
             if (!blocks) return ["급식 정보가 없습니다."];
@@ -72,35 +91,16 @@ jobs:
             if (!rowBlock) return ["급식 정보가 없습니다."];
 
             const dish = rowBlock.row[0].DDISH_NM;
-            return dish.replaceAll("<br/>","\n").split("\n");
+            return dish.split(/<br\s*\/?>/i).map(v => v.trim());
           }
 
           (async () => {
+            const t = tomorrowKST();
+            const lines = await fetchMeal(ymd(t));
 
-            const tomorrow = getTomorrowKST();
-            const ymd = formatYMD(tomorrow);
-
-            const title = formatTitle(tomorrow);
-            const dateStr = formatDate(tomorrow);
-            const menuLines = await fetchMeal(ymd);
-
-            const BG = "#212224";
-            const FG = "#F5F5F5";
-
-            const x = 60;
-            const titleY = 70;
-            const bodyStartY = 190;
-            const lineStep = 62;
-            const dateY = 1000;
-
-            const esc = s =>
-              s.replaceAll("&","&amp;")
-               .replaceAll("<","&lt;")
-               .replaceAll(">","&gt;");
-
-            const menuText = menuLines.map((line,i)=>{
-              const y = bodyStartY + i * lineStep;
-              return `<text x="${x}" y="${y}" class="body">${esc(line)}</text>`;
+            const menuText = lines.map((line,i)=>{
+              const yy = bodyStartY + i*lineStep;
+              return `<text x="${x}" y="${yy}" class="body">${esc(line)}</text>`;
             }).join("\n");
 
             const svg = `
@@ -110,28 +110,16 @@ jobs:
                 .body  { font-family: "Noto Sans KR", sans-serif; font-size: 44px; fill: ${FG}; }
                 .date  { font-family: "Noto Sans KR", sans-serif; font-size: 46px; fill: ${FG}; }
               </style>
-
               <rect width="100%" height="100%" fill="${BG}"/>
-
-              <text x="${x}" y="${titleY}" class="title">${esc(title)}</text>
-
+              <text x="${x}" y="${titleY}" class="title">${t.getMonth()+1}월 ${t.getDate()}일 [급식]</text>
               ${menuText}
-
-              <text x="${x}" y="${dateY}" class="date">${esc(dateStr)}</text>
+              <text x="${x}" y="${dateY}" class="date">${t.toISOString().slice(0,10)}</text>
             </svg>`;
 
             fs.mkdirSync("output",{recursive:true});
-
-            await sharp(Buffer.from(svg))
-              .png()
-              .toFile("output/tomorrow.png");
-
+            await sharp(Buffer.from(svg)).png().toFile("output/tomorrow.png");
             console.log("saved output/tomorrow.png");
-
-          })().catch(e=>{
-            console.error(e);
-            process.exit(1);
-          });
+          })();
           NODE
 
       - name: Upload artifact
