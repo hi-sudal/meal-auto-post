@@ -1,4 +1,4 @@
-name: Render Tomorrow Meal (Test)
+name: Render Tomorrow Meals (3 images)
 
 on:
   workflow_dispatch:
@@ -20,6 +20,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fontconfig
 
+          if [ ! -f "NotoSansKR-Regular.ttf" ]; then
+            echo "ERROR: repo root에 NotoSansKR-Regular.ttf가 없습니다."
+            exit 1
+          fi
+
           mkdir -p ~/.local/share/fonts
           cp NotoSansKR-Regular.ttf ~/.local/share/fonts/
           fc-cache -f
@@ -29,18 +34,19 @@ jobs:
           npm init -y
           npm i sharp axios
 
-      - name: Render Tomorrow Meal Image
+      - name: Render Tomorrow Meals (Breakfast/Lunch/Dinner)
         run: |
           node <<'NODE'
           const fs = require("fs");
           const sharp = require("sharp");
           const axios = require("axios");
 
+          // ====== (테스트용) NEIS 값 ======
           const NEIS_KEY = "967c5ea2dcd94832b604e3eb2f4ff8eb";
           const ATPT = "Q10";
           const SCHOOL = "8490081";
-          const MMEAL = "2"; // 중식
 
+          // ====== 템플릿(완성본 유지) ======
           const W = 1080, H = 1080;
           const BG = "#212224";
           const FG = "#F5F5F5";
@@ -51,79 +57,146 @@ jobs:
           const lineStep = 62;
           const dateY = 1000;
 
-          function tomorrowKST() {
+          const TITLE_SIZE = 56;
+          const BODY_SIZE  = 44;
+          const DATE_SIZE  = 46;
+
+          const MAX_LINES = 12;
+
+          const esc = (s) =>
+            String(s)
+              .replaceAll("&","&amp;")
+              .replaceAll("<","&lt;")
+              .replaceAll(">","&gt;")
+              .replaceAll('"',"&quot;")
+              .replaceAll("'","&apos;");
+
+          function nowKST() {
             const now = new Date();
-            const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-            const kst = new Date(utc + 9 * 60 * 60 * 1000);
-            kst.setDate(kst.getDate() + 1);
-            return kst;
+            const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+            return new Date(utcMs + 9 * 60 * 60 * 1000);
           }
 
-          function ymd(d) {
-            return d.toISOString().slice(0,10).replaceAll("-","");
+          function tomorrowKST() {
+            const d = nowKST();
+            d.setDate(d.getDate() + 1);
+            return d;
           }
 
-          function esc(s) {
-            return s.replaceAll("&","&amp;")
-                    .replaceAll("<","&lt;")
-                    .replaceAll(">","&gt;");
+          function ymd(date) {
+            // KST 날짜 기준 문자열(YYYYMMDD)
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, "0");
+            const d = String(date.getDate()).padStart(2, "0");
+            return `${y}${m}${d}`;
           }
 
-          async function fetchMeal(dateYMD) {
-            const res = await axios.get(
-              "https://open.neis.go.kr/hub/mealServiceDietInfo",
-              {
-                params: {
-                  KEY: NEIS_KEY,
-                  Type: "json",
-                  ATPT_OFCDC_SC_CODE: ATPT,
-                  SD_SCHUL_CODE: SCHOOL,
-                  MLSV_YMD: dateYMD,
-                  MMEAL_SC_CODE: MMEAL
-                }
-              }
-            );
+          function dateISO(date) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, "0");
+            const d = String(date.getDate()).padStart(2, "0");
+            return `${y}-${m}-${d}`;
+          }
+
+          function titleText(date, label) {
+            // label: 조식/중식/석식
+            const mm = date.getMonth() + 1;
+            const dd = date.getDate();
+            return `${mm}월 ${dd}일 [${label}]`;
+          }
+
+          async function fetchMealLines(dateYMD, mmeal) {
+            const res = await axios.get("https://open.neis.go.kr/hub/mealServiceDietInfo", {
+              params: {
+                KEY: NEIS_KEY,
+                Type: "json",
+                pIndex: 1,
+                pSize: 100,
+                ATPT_OFCDC_SC_CODE: ATPT,
+                SD_SCHUL_CODE: SCHOOL,
+                MLSV_YMD: dateYMD,
+                MMEAL_SC_CODE: mmeal, // 1/2/3
+              },
+              timeout: 30000
+            });
 
             const blocks = res.data.mealServiceDietInfo;
             if (!blocks) return ["급식 정보가 없습니다."];
 
             const rowBlock = blocks.find(b => b.row);
-            if (!rowBlock) return ["급식 정보가 없습니다."];
+            if (!rowBlock || !rowBlock.row || !rowBlock.row[0]) return ["급식 정보가 없습니다."];
 
-            const dish = rowBlock.row[0].DDISH_NM;
-            return dish.split(/<br\s*\/?>/i).map(v => v.trim());
+            const dishRaw = rowBlock.row[0].DDISH_NM || "";
+            if (!dishRaw.trim()) return ["급식 정보가 없습니다."];
+
+            const lines = dishRaw
+              .replace(/\r/g, "")
+              .split(/<br\s*\/?>/i)
+              .map(v => v.trim())
+              .filter(Boolean);
+
+            return lines.length ? lines : ["급식 정보가 없습니다."];
           }
 
-          (async () => {
-            const t = tomorrowKST();
-            const lines = await fetchMeal(ymd(t));
+          async function renderOne({ title, menuLines, dateStr, outPath }) {
+            const safeLines = menuLines.slice(0, MAX_LINES);
 
-            const menuText = lines.map((line,i)=>{
-              const yy = bodyStartY + i*lineStep;
+            const menuText = safeLines.map((line, i) => {
+              const yy = bodyStartY + i * lineStep;
               return `<text x="${x}" y="${yy}" class="body">${esc(line)}</text>`;
             }).join("\n");
 
             const svg = `
             <svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
               <style>
-                .title { font-family: "Noto Sans KR", sans-serif; font-size: 56px; fill: ${FG}; }
-                .body  { font-family: "Noto Sans KR", sans-serif; font-size: 44px; fill: ${FG}; }
-                .date  { font-family: "Noto Sans KR", sans-serif; font-size: 46px; fill: ${FG}; }
+                .title { font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif; font-size: ${TITLE_SIZE}px; fill: ${FG}; }
+                .body  { font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif; font-size: ${BODY_SIZE}px; fill: ${FG}; }
+                .date  { font-family: "Noto Sans KR", "Noto Sans CJK KR", sans-serif; font-size: ${DATE_SIZE}px; fill: ${FG}; }
               </style>
-              <rect width="100%" height="100%" fill="${BG}"/>
-              <text x="${x}" y="${titleY}" class="title">${t.getMonth()+1}월 ${t.getDate()}일 [급식]</text>
-              ${menuText}
-              <text x="${x}" y="${dateY}" class="date">${t.toISOString().slice(0,10)}</text>
-            </svg>`;
 
-            fs.mkdirSync("output",{recursive:true});
-            await sharp(Buffer.from(svg)).png().toFile("output/tomorrow.png");
-            console.log("saved output/tomorrow.png");
-          })();
+              <rect width="100%" height="100%" fill="${BG}"/>
+              <text x="${x}" y="${titleY}" class="title">${esc(title)}</text>
+              ${menuText}
+              <text x="${x}" y="${dateY}" class="date">${esc(dateStr)}</text>
+            </svg>`.trim();
+
+            await sharp(Buffer.from(svg)).png().toFile(outPath);
+          }
+
+          (async () => {
+            const t = tomorrowKST();
+            const dateYMD = ymd(t);
+            const dateStr = dateISO(t);
+
+            const mealMap = [
+              { mmeal: "1", label: "조식", file: "breakfast" },
+              { mmeal: "2", label: "중식", file: "lunch" },
+              { mmeal: "3", label: "석식", file: "dinner" },
+            ];
+
+            fs.mkdirSync("output", { recursive: true });
+
+            for (const m of mealMap) {
+              const lines = await fetchMealLines(dateYMD, m.mmeal);
+              const outPath = `output/${m.file}.png`;
+
+              await renderOne({
+                title: titleText(t, m.label),
+                menuLines: lines,
+                dateStr,
+                outPath
+              });
+
+              console.log("saved", outPath);
+            }
+          })().catch((e) => {
+            console.error(e);
+            process.exit(1);
+          });
           NODE
 
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: tomorrow-meal
-          path: output/tomorrow.png
+          name: tomorrow-meals
+          path: output/*.png
